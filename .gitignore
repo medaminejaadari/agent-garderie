@@ -1,0 +1,20 @@
+# Fichiers contenant des secrets (NE JAMAIS LES COMMITER)
+.env
+cles_api.json
+
+# Environnement Python
+venv/
+env/
+__pycache__/
+*.pyc
+
+# Fichiers de configuration de l'éditeur
+.vscode/
+.idea/
+
+# Dossiers système
+Thumbs.db
+.DS_Store
+
+# Si vous déployez avec Render, gardez le fichier .env sur le serveur, pas dans le code
+

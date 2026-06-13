@@ -1,0 +1,10 @@
+{
+  "nom": "Garderie Les Petits Loups",
+  "slogan": "Des petits pas, de grands sourires",
+  "telephone": "01 23 45 67 89",
+  "email_expediteur": "contact@lespetitsloups.fr",
+  "site_web": "lespetitsloups.fr",
+  "style_background": "linear-gradient(145deg, #f6f0ff 0%, #fdfaff 100%)",
+  "couleur_principale": "#6d28d9",
+  "couleur_secondaire": "#c084fc"
+}
