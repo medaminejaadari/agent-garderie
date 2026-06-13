@@ -1,6 +1,6 @@
 flask
 flask-cors
-langchain
+langchain-classic
 langchain-groq
 python-dotenv
 requests
