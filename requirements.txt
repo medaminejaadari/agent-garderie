@@ -1,7 +1,7 @@
-flask
-flask-cors
-langchain-classic
-langchain-groq
-python-dotenv
-requests
-gunicorn
+flask==2.3.3
+flask-cors==4.0.0
+langchain==0.1.20
+langchain-groq==0.1.9
+python-dotenv==1.0.0
+requests==2.31.0
+gunicorn==21.2.0
