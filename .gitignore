@@ -18,3 +18,6 @@ Thumbs.db
 
 # Si vous déployez avec Render, gardez le fichier .env sur le serveur, pas dans le code
 
+venv_final/
+venv/
+venv_clean/

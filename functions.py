@@ -5,6 +5,7 @@ import os
 import csv
 import json
 import re
+import sqlite3
 import requests
 import smtplib
 from email.message import EmailMessage
@@ -14,31 +15,25 @@ from langchain.agents import AgentExecutor, create_tool_calling_agent
 from langchain.tools import tool
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
-# ---------- Chargement des variables d'environnement ----------
 load_dotenv()
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 if not GROQ_API_KEY:
     raise ValueError("GROQ_API_KEY manquante dans .env")
 
-# ---------- LLM global (une seule instance) ----------
-llm = ChatGroq(
-    model="llama-3.3-70b-versatile",
-    api_key=GROQ_API_KEY,
-    temperature=0.3,
-)
+llm = ChatGroq(model="llama-3.3-70b-versatile", api_key=GROQ_API_KEY, temperature=0.3)
 
-# ---------- 1. Outil dynamique (lecture CSV) ----------
-def creer_outil_observations(garderie_dir):
+# ---------- 1. Outil CSV ----------
+def creer_outil_observations_csv(garderie_dir):
     observations_path = os.path.join(garderie_dir, "observations.csv")
     @tool
     def obtenir_observations(prenom: str) -> str:
-        """Récupère toutes les observations d'un enfant dans cette garderie."""
+        """Récupère les observations depuis le fichier CSV."""
         try:
             with open(observations_path, mode="r", encoding="utf-8") as f:
                 reader = csv.DictReader(f)
                 lignes = [l for l in reader if l["prenom"].lower() == prenom.lower()]
             if not lignes:
-                return f"Aucune observation trouvée pour {prenom}."
+                return f"Aucune observation CSV trouvée pour {prenom}."
             lignes.sort(key=lambda x: x["date"])
             resultats = []
             for l in lignes:
@@ -48,10 +43,40 @@ def creer_outil_observations(garderie_dir):
                 )
             return "\n".join(resultats)
         except Exception as e:
-            return f"Erreur : {e}"
+            return f"Erreur CSV : {e}"
     return obtenir_observations
 
-# ---------- 2. Récupération email/téléphone d'un parent ----------
+# ---------- 2. Outil SQL ----------
+def creer_outil_observations_sql(garderie_dir):
+    db_path = os.path.join(garderie_dir, "garderie.db")
+    @tool
+    def obtenir_observations_sql(prenom: str) -> str:
+        """Récupère les observations depuis la base de données SQLite."""
+        try:
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT date, repas, sieste_minutes, humeur, activite_principale, remarque
+                FROM observations
+                WHERE prenom LIKE ?
+                ORDER BY date
+            """, (f"%{prenom}%",))
+            rows = cursor.fetchall()
+            conn.close()
+            if not rows:
+                return f"Aucune observation SQL trouvée pour {prenom}."
+            resultats = []
+            for row in rows:
+                resultats.append(
+                    f"- {row[0]} : Repas = {row[1]}, Sieste = {row[2]} min, "
+                    f"Humeur = {row[3]}, Activité = {row[4]}, Remarque = {row[5]}"
+                )
+            return "\n".join(resultats)
+        except Exception as e:
+            return f"Erreur SQL : {e}"
+    return obtenir_observations_sql
+
+# ---------- 3. Récupération email/téléphone (parents.csv) ----------
 def obtenir_parent_info(garderie_dir, prenom, champ):
     parents_path = os.path.join(garderie_dir, "parents.csv")
     try:
@@ -64,66 +89,56 @@ def obtenir_parent_info(garderie_dir, prenom, champ):
     except:
         return None
 
-# ---------- 3. Génération du prompt personnalisé (avec HTML) ----------
+# ---------- 4. Prompt simplifié (sans accolades non échappées) ----------
 def generer_prompt_personnalise(config):
     nom = config.get("nom", "Garderie")
-    slogan = config.get("slogan", "")
-    telephone = config.get("telephone", "01 23 45 67 89")
-    email_contact = config.get("email_expediteur") or config.get("email", "contact@example.fr")
-    site_web = config.get("site_web", "")
-    style_bg = config.get("style_background", "linear-gradient(145deg, #f6f0ff 0%, #fdfaff 100%)")
-    couleur_principale = config.get("couleur_principale", "#6d28d9")
-    couleur_secondaire = config.get("couleur_secondaire", "#c084fc")
+    prompt_system = f"""Tu es un assistant éducatif. Génére un rapport hebdomadaire pour un enfant de la garderie {nom}.
+Retourne uniquement le rapport dans le format suivant (sans aucun texte avant ou après) :
 
-    prompt_system = f"""Tu es un assistant éducatif. Génére un rapport HTML structuré selon le modèle ci-dessous.
-Utilise l'outil 'obtenir_observations' pour obtenir les données réelles.
+#### Alimentation
+- [résumé en une phrase]
 
-Modèle HTML (à suivre exactement) :
+#### Sommeil
+- [résumé en une phrase]
 
-<div style="background: {style_bg}; border-radius: 32px; padding: 10px;">
-  <div style="background: rgba(255,255,255,0.96); border-radius: 28px; box-shadow: 0 20px 35px -12px rgba(0,0,0,0.15); overflow: hidden;">
-    <div style="background: linear-gradient(95deg, {couleur_principale}, {couleur_secondaire}); padding: 24px 28px; text-align: center;">
-      <h1 style="color: white;">🏫 {nom}</h1>
-      <p style="color: #f3e8ff;">{slogan}</p>
-    </div>
-    <div style="padding: 28px;">
-      <h2>🏫 {nom}</h2>
-      <h3>📅 Rapport de la semaine pour [PRÉNOM]</h3>
-      <h3>🍽️ Alimentation</h3>
-      <ul><li>...</li></ul>
-      <h3>😴 Sommeil</h3>
-      <ul><li>...</li></ul>
-      <h3>😊 Humeur</h3>
-      <ul><li>...</li></ul>
-      <h3>🎨 Activités</h3>
-      <ul><li>...</li></ul>
-      <h3>💡 Conseils</h3>
-      <ul><li>...</li></ul>
-      <h3>👋 Conclusion</h3>
-      <p>...</p>
-    </div>
-    <div style="background: #faf9fe; padding: 18px; text-align: center;">
-      📞 {telephone} | ✉️ {email_contact} {f"| 🌐 {site_web}" if site_web else ""}
-    </div>
-  </div>
-</div>
-Sois bienveillant. N'invente pas de données.
+#### Humeur et comportement
+- [résumé en une phrase]
+
+#### Activités et progrès
+- [résumé en une phrase]
+
+#### Conseils pour la maison
+- [résumé en une phrase]
+
+#### Conclusion
+- [une phrase positive]
+
+Utilise les données de l'outil d'observation. Sois bienveillant et concis. Ne liste pas les dates. Remplace chaque [résumé...] par le texte approprié.
 """
     return prompt_system
 
-# ---------- 4. Création de l'executor (agent) pour une garderie ----------
-def creer_executor(garderie_dir, config):
-    outil = creer_outil_observations(garderie_dir)
+# ---------- 5. Création de l'executor avec choix de l'outil ----------
+def creer_executor(garderie_dir, config, tool_choice="both"):
+    outil_csv = creer_outil_observations_csv(garderie_dir)
+    outil_sql = creer_outil_observations_sql(garderie_dir)
+    
+    if tool_choice == "csv":
+        outils = [outil_csv]
+    elif tool_choice == "sql":
+        outils = [outil_sql]
+    else:
+        outils = [outil_csv, outil_sql]
+    
     system_prompt = generer_prompt_personnalise(config)
     prompt = ChatPromptTemplate.from_messages([
         ("system", system_prompt),
         ("human", "{input}"),
         MessagesPlaceholder("agent_scratchpad"),
     ])
-    agent = create_tool_calling_agent(llm, [outil], prompt)
-    return AgentExecutor(agent=agent, tools=[outil], verbose=False, handle_parsing_errors=True)
+    agent = create_tool_calling_agent(llm, outils, prompt)
+    return AgentExecutor(agent=agent, tools=outils, verbose=False, handle_parsing_errors=True, max_iterations=5)
 
-# ---------- 5. Envoi d'email ----------
+# ---------- 6. Envoi d'email ----------
 def envoyer_email(destinataire, sujet, contenu_html, reply_to=None):
     expediteur = os.getenv("SENDER_EMAIL")
     mot_de_passe = os.getenv("EMAIL_PASSWORD")
@@ -150,7 +165,7 @@ def envoyer_email(destinataire, sujet, contenu_html, reply_to=None):
     except Exception as e:
         return False, str(e)
 
-# ---------- 6. Envoi WhatsApp via TextMeBot ----------
+# ---------- 7. Envoi WhatsApp ----------
 def envoyer_whatsapp_textmebot(destinataire: str, contenu_texte: str) -> tuple:
     api_key = os.getenv("TEXTMEBOT_API_KEY")
     if not api_key:
