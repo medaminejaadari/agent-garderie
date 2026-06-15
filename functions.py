@@ -76,6 +76,42 @@ def creer_outil_observations_sql(garderie_dir):
             return f"Erreur SQL : {e}"
     return obtenir_observations_sql
 
+
+def creer_outil_observations_api(api_url, api_key=None):
+    @tool
+    def obtenir_observations_api(prenom: str) -> str:
+        """Récupère les observations depuis une API externe."""
+        if not api_url:
+            return "Erreur : URL de l'API non fournie."
+        headers = {}
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+        params = {"prenom": prenom}
+        try:
+            response = requests.get(api_url, headers=headers, params=params, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+            if not isinstance(data, list):
+                return "Erreur : le format de la réponse API n'est pas une liste."
+            resultats = []
+            for obs in data:
+                date = obs.get('date', 'Date inconnue')
+                repas = obs.get('repas', 'Non spécifié')
+                sieste = obs.get('sieste_minutes', '?')
+                humeur = obs.get('humeur', 'Non spécifiée')
+                activite = obs.get('activite_principale', 'Non spécifiée')
+                remarque = obs.get('remarque', '')
+                resultats.append(
+                    f"- {date} : Repas = {repas}, Sieste = {sieste} min, "
+                    f"Humeur = {humeur}, Activité = {activite}, Remarque = {remarque}"
+                )
+            return "\n".join(resultats) if resultats else f"Aucune observation trouvée pour {prenom}."
+        except requests.exceptions.RequestException as e:
+            return f"Erreur de connexion à l'API externe : {e}"
+        except Exception as e:
+            return f"Erreur inattendue : {e}"
+    return obtenir_observations_api
+
 # ---------- 3. Récupération email/téléphone (parents.csv) ----------
 def obtenir_parent_info(garderie_dir, prenom, champ):
     parents_path = os.path.join(garderie_dir, "parents.csv")

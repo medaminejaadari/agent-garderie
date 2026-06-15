@@ -8,18 +8,19 @@ import random
 from functions import (
     creer_outil_observations_csv,
     creer_outil_observations_sql,
+    creer_outil_observations_api,
     obtenir_parent_info,
     envoyer_email,
     envoyer_whatsapp_textmebot
 )
 
 def generate_summary_and_fun(raw_observations, prenom):
-    """Analyze the raw bullet list to produce a summary and a fun element."""
+    """Analyse la liste brute des observations et produit un résumé et un élément amusant."""
     lines = [line.strip() for line in raw_observations.split('\n') if line.strip().startswith('-')]
     if not lines:
-        return "Résumé non disponible", "😊 Profitez de chaque instant avec votre enfant !"
+        return "Résumé non disponible", "😊 Profitez de chaque instant avec votre enfant !", "⭐ Continuez à encourager votre enfant."
 
-    # Extract data
+    # Extraire les données
     repas_list = []
     sieste_list = []
     humeur_list = []
@@ -37,8 +38,7 @@ def generate_summary_and_fun(raw_observations, prenom):
             if 'Remarque =' in part:
                 remarque_list.append(part.split('=')[1].strip())
 
-    # Summary text
-    # Appetite
+    # Résumé appétit
     if all(r == 'tout mangé' for r in repas_list):
         app_text = f"{prenom} a très bien mangé tous les jours !"
     elif 'refusé' in repas_list:
@@ -46,11 +46,11 @@ def generate_summary_and_fun(raw_observations, prenom):
     else:
         app_text = f"{prenom} a bien mangé la plupart des jours."
 
-    # Sleep
+    # Résumé sommeil
     avg_sleep = sum(sieste_list) // len(sieste_list) if sieste_list else 0
     sleep_text = f"Le sommeil était régulier, avec une moyenne de {avg_sleep} minutes de sieste par jour."
 
-    # Mood
+    # Résumé humeur
     happy_days = humeur_list.count('joyeux')
     sad_days = humeur_list.count('triste')
     if happy_days > sad_days:
@@ -60,7 +60,7 @@ def generate_summary_and_fun(raw_observations, prenom):
     else:
         mood_text = f"{prenom} était calme et participant."
 
-    # Advice
+    # Conseil
     if 'refusé' in repas_list:
         advice = "Continuez à varier les repas pour éveiller sa curiosité gustative."
     elif avg_sleep < 60:
@@ -78,33 +78,31 @@ def generate_summary_and_fun(raw_observations, prenom):
     </ul>
     """
 
-    # Fun element: pick a random cheerful remark from the observations or add a little joke
+    # Élément amusant
     fun_moments = [r for r in remarque_list if any(word in r for word in ['partagé', 'construit', 'peint', 'mélangé', 'rire', 'sourire'])]
     if fun_moments:
         fun_text = random.choice(fun_moments)
         fun_html = f"<h3>😄 Un moment qui a fait sourire</h3><p>✨ {fun_text} ✨</p>"
     else:
-        fun_html = "<h3>😄 Un moment qui a fait sourire</h3><p>🌟 Chaque jour est une nouvelle aventure avec {prenom} ! 🌟</p>"
+        fun_html = f"<h3>😄 Un moment qui a fait sourire</h3><p>🌟 Chaque jour est une nouvelle aventure avec {prenom} ! 🌟</p>"
 
-    # Positive star
+    # Étoile de la semaine
     star_html = f"<h3>⭐ Étoile de la semaine</h3><p>Bravo {prenom} pour ta belle énergie et ta participation ! Continues comme ça 🌈</p>"
 
     return summary, fun_html, star_html
 
 def build_html_report(raw_observations, config, prenom):
-    """Convert raw bullet list into an HTML bullet list inside the full card, plus summary and fun."""
-    # Split raw text into lines and keep those starting with '-'
+    """Convertit la liste brute en HTML complet (carte stylisée + résumé + amusant + détails)."""
     lines = [line.strip() for line in raw_observations.split('\n') if line.strip().startswith('-')]
     if not lines:
         bullets_html = f"<p>{raw_observations}</p>"
     else:
-        items = ''.join([f'<li>{line[2:]}</li>' for line in lines])  # remove leading '- '
+        items = ''.join([f'<li>{line[2:]}</li>' for line in lines])  # enlève le '- ' initial
         bullets_html = f'<ul>{items}</ul>'
-    
-    # Generate additional sections
+
+    # Générer les sections supplémentaires
     summary, fun, star = generate_summary_and_fun(raw_observations, prenom)
-    
-    # Use the config values for styling
+
     nom = config.get("nom", "Garderie")
     slogan = config.get("slogan", "")
     telephone = config.get("telephone", "01 23 45 67 89")
@@ -113,7 +111,7 @@ def build_html_report(raw_observations, config, prenom):
     style_bg = config.get("style_background", "linear-gradient(145deg, #f6f0ff 0%, #fdfaff 100%)")
     couleur_principale = config.get("couleur_principale", "#6d28d9")
     couleur_secondaire = config.get("couleur_secondaire", "#c084fc")
-    
+
     full_html = f'''<div style="background: {style_bg}; background-image: radial-gradient(circle at 10% 20%, rgba(139,92,246,0.03) 2px, transparent 2px); background-size: 20px 20px; border-radius: 32px; padding: 10px;">
   <div style="background: rgba(255,255,255,0.96); border-radius: 28px; box-shadow: 0 20px 35px -12px rgba(0,0,0,0.15); overflow: hidden;">
     <div style="background: linear-gradient(95deg, {couleur_principale}, {couleur_secondaire}); padding: 24px 28px; text-align: center; border-bottom: 3px solid #fbbf24;">
@@ -138,7 +136,6 @@ def build_html_report(raw_observations, config, prenom):
     return full_html
 
 def main():
-    # (same main function as before, unchanged)
     print("=" * 60)
     print("📋 Agent de rapports pour garderie (Email / WhatsApp)")
     print("=" * 60)
@@ -171,16 +168,24 @@ def main():
     else:
         config = {"nom": garderie_nom, "slogan": "", "telephone": "01 23 45 67 89", "email_expediteur": "contact@example.fr"}
 
+    # --- Choix de la source de données (CSV, SQL, API) ---
     print("\n🔍 Choisissez la source des données :")
     print("  1. CSV (fichier observations.csv)")
     print("  2. SQL (base de données garderie.db)")
-    source = input("Votre choix (1/2) : ").strip()
+    print("  3. API externe (fournir l'URL)")
+    source = input("Votre choix (1/2/3) : ").strip()
+
     if source == "1":
         outil_obs = creer_outil_observations_csv(garderie_dir)
         source_name = "CSV"
     elif source == "2":
         outil_obs = creer_outil_observations_sql(garderie_dir)
         source_name = "SQL"
+    elif source == "3":
+        api_url = input("URL de l'API (ex: https://api.exemple.com/observations) : ").strip()
+        api_key = input("Clé API (optionnelle, laisser vide si non nécessaire) : ").strip() or None
+        outil_obs = creer_outil_observations_api(api_url, api_key)
+        source_name = f"API ({api_url})"
     else:
         print("Choix invalide. Utilisation du CSV par défaut.")
         outil_obs = creer_outil_observations_csv(garderie_dir)
@@ -189,6 +194,7 @@ def main():
     print(f"\n✅ Garderie sélectionnée : {config.get('nom', garderie_nom)}")
     print(f"📁 Source des données : {source_name}\n")
 
+    # --- Boucle principale ---
     while True:
         prenom = input("Prénom de l'enfant (ou 'quit') : ").strip()
         if prenom.lower() in ["quit", "exit", "q"]:
@@ -198,15 +204,15 @@ def main():
 
         print("🔍 Récupération des observations...")
         raw_report = outil_obs.invoke({"prenom": prenom})
-        
+
         if "Aucune observation" in raw_report or "Erreur" in raw_report:
             print(raw_report)
             continue
-        
-        # Build the full HTML email content
+
+        # Construction du rapport HTML complet
         rapport_html = build_html_report(raw_report, config, prenom)
-        
-        # Preview
+
+        # Aperçu (texte)
         preview = re.sub('<[^<]+?>', '', rapport_html)[:300]
         print("\n--- APERÇU (HTML converti) ---")
         print(preview + ("..." if len(preview) >= 300 else ""))
@@ -227,11 +233,14 @@ def main():
             if not telephone_parent:
                 print("❌ Aucun téléphone trouvé pour cet enfant.")
                 continue
-            # For WhatsApp, send the original plain text (no HTML)
-            success, msg = envoyer_whatsapp_textmebot(telephone_parent, raw_report)
+            # WhatsApp reçoit le texte brut
+            raw_text = re.sub('<[^<]+?>', '', rapport_html)
+            success, msg = envoyer_whatsapp_textmebot(telephone_parent, raw_text)
             print(msg)
         else:
             print("Envoi annulé.")
 
 if __name__ == "__main__":
     main()
+
+    
